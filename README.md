@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ReguLens
 
-## Getting Started
+AI-powered regulatory document intelligence: turn business licensing applications into
+structured, traceable, validated records, with human review.
 
-First, run the development server:
+> Independent portfolio project. All sample documents and data are fictional.
+
+**Status:** Phase 1 (foundation): schemas, database, configuration, tests.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
+
+## Requirements
+
+- Node.js 24 (`nvm use` reads `.nvmrc`)
+- pnpm 10 (`corepack enable && corepack prepare pnpm@10 --activate`)
+- Docker (for local Postgres)
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+nvm use
+pnpm install
+cp .env.example .env.local
+pnpm db:up        # start Postgres in Docker
+pnpm db:migrate   # apply migrations
+pnpm check        # lint + typecheck + tests
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## AI provider
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+ReguLens uses the Google Gemini API free tier. Without a key it falls back to mock
+extraction, so everything except real extraction works offline.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Sign in at [Google AI Studio](https://aistudio.google.com/apikey) and create an API key.
+   No billing account is needed for the free tier.
+2. Put it in `.env.local` (never in `.env.example`, never in client code):
+   ```
+   GEMINI_API_KEY=your-key
+   ```
+3. Optional: `GEMINI_MODEL` (default `gemini-3.8-flash`), or `AI_PROVIDER=mock` to force mocks.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Free-tier limits vary by model and are shown in
+[AI Studio](https://aistudio.google.com/rate-limit). Free-tier inputs may be used by Google
+to improve its products, so use only synthetic documents.

@@ -1,3 +1,9 @@
+# Only esbuild (used by tsx, vitest, drizzle-kit) needs its install script.
+# The others were reviewed: @google/genai's is a no-op, protobufjs's is a CLI version check.
+onlyBuiltDependencies:
+  - esbuild
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+  - "@google/genai"
+  - protobufjs
