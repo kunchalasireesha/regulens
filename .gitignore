@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local uploads and data
 /.data/
+
+# personal notes (not part of the public repo)
+/notes/

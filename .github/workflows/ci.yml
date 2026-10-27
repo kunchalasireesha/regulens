@@ -8,6 +8,20 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: regulens
+          POSTGRES_PASSWORD: regulens
+          POSTGRES_DB: regulens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U regulens -d regulens"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,3 +34,5 @@ jobs:
       - run: pnpm typecheck
       # Unit and integration tests use mocked AI responses: no API key, no network.
       - run: pnpm test
+      # Creates and migrates a separate regulens_test database on the service container.
+      - run: pnpm test:integration

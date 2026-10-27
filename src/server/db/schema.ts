@@ -27,6 +27,7 @@ import {
   USER_ROLES,
   VALIDATION_STATUSES,
 } from "../../lib/domain/statuses"; // relative: drizzle-kit loads this file outside Next
+import type { ExtractionResult } from "../../lib/schemas/extraction";
 
 // Every tenant-owned table carries organization_id, even where it is derivable
 // through documents. The MVP runs a single organization, but scoping every query
@@ -91,6 +92,12 @@ export const documents = pgTable(
     reviewStatus: documentReviewStatus("review_status").notNull().default("unreviewed"),
     /** Machine-readable failure reason, safe to show to users. Never raw error text. */
     failureCode: text("failure_code"),
+    /**
+     * Incremented each time the pipeline claims the document. The claimer keeps the value
+     * it set and only finishes the attempt while it still matches, so a run that stalled
+     * and was reclaimed cannot overwrite the newer attempt's outcome (a fencing token).
+     */
+    processingAttempts: integer("processing_attempts").notNull().default(0),
     reviewedBy: uuid("reviewed_by").references(() => users.id),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -141,6 +148,12 @@ export const extractionRuns = pgTable(
     /** What the run would cost at paid-tier list prices; free-tier runs cost nothing. */
     estimatedCostUsd: numeric("estimated_cost_usd", { precision: 12, scale: 6 }),
     errorCode: text("error_code"),
+    /**
+     * The validated ExtractionResult of a successful run, exactly as the model returned
+     * it. Kept so fields can be re-derived (e.g. after a verification or validation
+     * change) without calling the model again. Null for failed runs.
+     */
+    result: jsonb("result").$type<ExtractionResult>(),
     createdAt: createdAt(),
   },
   (t) => [index("extraction_runs_document_idx").on(t.documentId)],
