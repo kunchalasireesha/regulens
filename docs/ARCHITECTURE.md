@@ -156,6 +156,31 @@ Fields are ordered by an explicit comparator, not by the stored result, because 
 does not preserve object key order. A malformed id and another organization's document
 both render the same not-found page.
 
+**Review commands.** Accepting or correcting a field, resolving an issue, approving, and
+rejecting are commands in `src/server/review`; server actions only parse the form. Each
+command runs in one transaction that first locks the document row (`SELECT … FOR UPDATE`),
+so commands on one document run one at a time and approval checks a consistent state. A
+refused command throws inside the transaction, so it writes nothing, not even the
+`review_started` event. Every change is logged to `review_events` with the previous and
+new value. Approved and rejected documents are final.
+
+**Corrections are re-validated.** A correction is checked against the field's shape, stored
+in normalized form (ISO date, state code), and the rules are re-run on the current values.
+Only issues naming the changed field are touched: an open one that no longer applies is
+resolved as `corrected`, and a problem the correction introduces (ownership typed as 150)
+becomes a new open issue. Issues match on rule, fields, and message, so a total that
+changes from 170% to 110% replaces the old issue instead of leaving a stale message.
+Evidence rules skip corrected fields: the analyst's value is their own.
+
+**Approval rule.** Every field accepted or corrected, and no open critical or warning issue.
+An issue is resolved by correcting the value, confirming it, or accepting it as a known
+issue; accepting, or overruling a critical issue, needs a note. Info issues never block.
+The rule is one pure function shared by the server and the review screen.
+
+**Export.** `GET /documents/[id]/export` returns JSON for approved documents only (409
+otherwise). Each value is labeled `extracted` (with its verified quotes), `corrected` (with
+the model's value), or `missing`, and every issue is listed with its resolution.
+
 ## Data handling
 
 - Synthetic documents only. Gemini free-tier inputs may be used by Google to improve its

@@ -44,7 +44,7 @@ export function validateExtraction(
         path,
         {
           normalizedValue: normalized.get(path) ?? null,
-          validationStatus: statusFor(path, issues),
+          validationStatus: fieldValidationStatus(path, issues),
         },
       ]),
     ),
@@ -75,7 +75,10 @@ const STATUS_BY_SEVERITY: Record<IssueSeverity, ValidationStatus> = {
 const RANK: Record<ValidationStatus, number> = { not_validated: 0, valid: 1, warning: 2, error: 3 };
 
 /** A field takes the status of the most severe issue that names it. */
-function statusFor(path: string, issues: ValidationIssue[]): ValidationStatus {
+export function fieldValidationStatus(
+  path: string,
+  issues: readonly Pick<ValidationIssue, "severity" | "fieldPaths">[],
+): ValidationStatus {
   return issues
     .filter((issue) => issue.fieldPaths.includes(path))
     .map((issue) => STATUS_BY_SEVERITY[issue.severity])

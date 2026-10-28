@@ -62,6 +62,23 @@ export function fieldShortLabel(path: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/** The shape of a field's value, which decides how it is edited and validated. */
+export type FieldKind = "text" | "date" | "number" | "address" | "text_list";
+
+const KINDS: Record<string, FieldKind> = {
+  dbaNames: "text_list",
+  formationDate: "date",
+  applicationDate: "date",
+  expirationDate: "date",
+  registeredAddress: "address",
+  principalAddress: "address",
+  ownershipPercentage: "number",
+};
+
+export function fieldKind(path: string): FieldKind {
+  return KINDS[path.split(".").at(-1) ?? ""] ?? "text";
+}
+
 // Labels are declared in schema order, so they double as the order within a group.
 const KEY_ORDER = Object.keys(LABELS);
 

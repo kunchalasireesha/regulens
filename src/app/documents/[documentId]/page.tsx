@@ -4,11 +4,14 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { formatBytes, formatTimestamp } from "@/lib/format";
+import { checkApproval } from "@/lib/review/approval";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { getDb } from "@/server/db/client";
 import { getDocumentReview, type ReviewDocument } from "@/server/db/queries/review";
-import { DocumentStatus, isInFlight } from "../../document-status";
+import { DocumentStatus, ReviewStatus, isInFlight } from "../../document-status";
 import { RefreshWhileProcessing } from "../../refresh-while-processing";
+import { ApprovalPanel } from "./review-controls";
+import { ReviewHistory } from "./review-history";
 import { ReviewWorkspace } from "./review-workspace";
 
 export const metadata: Metadata = { title: "Review · ReguLens" };
@@ -44,7 +47,7 @@ async function DocumentReview({ documentId }: { documentId: string }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight break-all">{document.filename}</h1>
           <div className="text-right">
-            <DocumentStatus doc={document} />
+            <DocumentStatus doc={document} /> <ReviewStatus status={document.reviewStatus} />
           </div>
         </div>
         <p className="text-sm text-zinc-500">
@@ -55,7 +58,23 @@ async function DocumentReview({ documentId }: { documentId: string }) {
       </header>
 
       {document.processingStatus === "ready_for_review" ? (
-        <ReviewWorkspace fields={review.fields} issues={review.issues} pages={review.pages} />
+        <>
+          <ApprovalPanel
+            documentId={document.id}
+            reviewStatus={document.reviewStatus}
+            check={checkApproval(review.fields, review.issues)}
+            reviewedBy={document.reviewedBy}
+            reviewedAt={document.reviewedAt}
+          />
+          <ReviewWorkspace
+            documentId={document.id}
+            editable={document.reviewStatus === "unreviewed" || document.reviewStatus === "in_review"}
+            fields={review.fields}
+            issues={review.issues}
+            pages={review.pages}
+          />
+          <ReviewHistory events={review.events} issues={review.issues} />
+        </>
       ) : (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">{pendingMessage(document)}</p>
       )}

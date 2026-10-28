@@ -1,22 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EvidenceStatus, IssueSeverity, ValidationStatus } from "@/lib/domain/statuses";
+import type { EvidenceStatus, FieldReviewStatus, IssueSeverity, ValidationStatus } from "@/lib/domain/statuses";
 import { formatFieldValue, sameJsonValue } from "@/lib/review/format-value";
 import { segmentText, type HighlightRange } from "@/lib/review/highlight";
 import { fieldGroup, fieldLabel, fieldShortLabel } from "@/lib/schemas/field-paths";
 import type { ReviewEvidence, ReviewField, ReviewIssue } from "@/server/db/queries/review";
+import { FieldReviewControls, IssueResolution } from "./review-controls";
 
-// Read-only review screen: fields on the left, the document's text on the right, with
-// every verified quote highlighted where it was found. Selecting a field shows its
-// evidence and issues and scrolls the document to its first highlight; clicking a
-// highlight selects the field that cited it. Editing and approval come in Phase 7.
+// Review screen: fields on the left, the document's text on the right, with every
+// verified quote highlighted where it was found. Selecting a field shows its evidence,
+// issues, and review actions, and scrolls the document to its first highlight; clicking a
+// highlight selects the field that cited it. Once the document is approved or rejected,
+// `editable` is false and the screen is read-only.
 
 type Page = { pageNumber: number; text: string };
 
-type Props = { fields: ReviewField[]; issues: ReviewIssue[]; pages: Page[] };
+type Props = {
+  documentId: string;
+  editable: boolean;
+  fields: ReviewField[];
+  issues: ReviewIssue[];
+  pages: Page[];
+};
 
-export function ReviewWorkspace({ fields, issues, pages }: Props) {
+export function ReviewWorkspace({ documentId, editable, fields, issues, pages }: Props) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const documentPane = useRef<HTMLDivElement>(null);
   const fieldPane = useRef<HTMLDivElement>(null);
@@ -65,7 +73,7 @@ export function ReviewWorkspace({ fields, issues, pages }: Props) {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <div ref={fieldPane} className="flex flex-col gap-6 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto lg:pr-2">
-        <IssueSummary issues={issues} onSelectField={selectField} />
+        <IssueSummary documentId={documentId} editable={editable} issues={issues} onSelectField={selectField} />
         {[...groups].map(([label, groupFields]) => (
           <section key={label} className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">{label}</h2>
@@ -73,6 +81,8 @@ export function ReviewWorkspace({ fields, issues, pages }: Props) {
               {groupFields.map((field) => (
                 <FieldCard
                   key={field.id}
+                  documentId={documentId}
+                  editable={editable}
                   field={field}
                   issues={issuesByField.get(field.fieldPath) ?? []}
                   selected={field.fieldPath === selectedPath}
@@ -141,18 +151,34 @@ const SEVERITY_STYLES: Record<IssueSeverity, { label: string; className: string 
   info: { label: "Info", className: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
 };
 
-function IssueSummary({ issues, onSelectField }: { issues: ReviewIssue[]; onSelectField: (path: string) => void }) {
+function IssueSummary({
+  documentId,
+  editable,
+  issues,
+  onSelectField,
+}: {
+  documentId: string;
+  editable: boolean;
+  issues: ReviewIssue[];
+  onSelectField: (path: string) => void;
+}) {
   if (issues.length === 0) {
     return <p className="text-sm text-zinc-600 dark:text-zinc-400">No validation issues.</p>;
   }
+  const open = issues.filter((issue) => issue.resolution === null).length;
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">
-        Issues ({issues.length})
+        Issues ({open} open of {issues.length})
       </h2>
       <ul className="flex flex-col gap-2 text-sm">
         {issues.map((issue) => (
-          <li key={issue.id} className="flex flex-col gap-1 rounded-md border border-zinc-200 p-2 dark:border-zinc-800">
+          <li
+            key={issue.id}
+            className={`flex flex-col gap-1 rounded-md border border-zinc-200 p-2 dark:border-zinc-800 ${
+              issue.resolution ? "opacity-60" : ""
+            }`}
+          >
             <div className="flex items-start gap-2">
               <Badge {...SEVERITY_STYLES[issue.severity]} />
               <span>{issue.message}</span>
@@ -171,6 +197,7 @@ function IssueSummary({ issues, onSelectField }: { issues: ReviewIssue[]; onSele
                 ))}
               </div>
             )}
+            <IssueResolution documentId={documentId} issue={issue} editable={editable} />
           </li>
         ))}
       </ul>
@@ -196,25 +223,44 @@ const VALIDATION_STYLES: Partial<Record<ValidationStatus, { label: string; class
   warning: { label: "Warning", className: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
 };
 
+const REVIEW_STYLES: Partial<Record<FieldReviewStatus, { label: string; className: string }>> = {
+  accepted: { label: "Accepted", className: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300" },
+  corrected: { label: "Corrected", className: "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300" },
+};
+
 function FieldCard({
+  documentId,
+  editable,
   field,
   issues,
   selected,
   onSelect,
 }: {
+  documentId: string;
+  editable: boolean;
   field: ReviewField;
   issues: ReviewIssue[];
   selected: boolean;
   onSelect: () => void;
 }) {
   const { fieldPath: path, extractionStatus } = field;
-  // A not_found field has no evidence by definition; only flag missing evidence on values.
-  const evidenceBadge = extractionStatus === "not_found" ? undefined : EVIDENCE_STYLES[field.evidenceStatus];
+  const corrected = field.reviewStatus === "corrected";
+  // A not_found field has no evidence by definition, and the evidence of a corrected field
+  // describes the model's value, not the one shown; only badge evidence for extracted values.
+  const evidenceBadge = extractionStatus === "not_found" || corrected ? undefined : EVIDENCE_STYLES[field.evidenceStatus];
   const validationBadge = VALIDATION_STYLES[field.validationStatus];
+  const reviewBadge = REVIEW_STYLES[field.reviewStatus];
+  const openIssues = issues.filter((issue) => issue.resolution === null);
   const value = formatFieldValue(path, field.currentValue);
-  const asWritten =
-    extractionStatus === "found" && !sameJsonValue(field.extractedValue, field.currentValue)
-      ? formatFieldValue(path, field.extractedValue)
+  // What the document said, when it differs from the value shown: the model's value for a
+  // correction, or the original form of a normalized value.
+  const original =
+    extractionStatus !== "not_found" && !sameJsonValue(field.extractedValue, field.currentValue)
+      ? extractionStatus === "ambiguous"
+        ? corrected
+          ? "Ambiguous in the document"
+          : null
+        : `${corrected ? "Extracted" : "As written"}: ${formatFieldValue(path, field.extractedValue)}`
       : null;
 
   return (
@@ -242,16 +288,18 @@ function FieldCard({
           )}
           {evidenceBadge && <Badge {...evidenceBadge} />}
           {validationBadge && <Badge {...validationBadge} />}
+          {reviewBadge && <Badge {...reviewBadge} />}
         </span>
         <span className={value === null ? "text-zinc-500 italic" : ""}>
-          {value ?? (extractionStatus === "ambiguous" ? "Needs an analyst to choose" : "Not stated in the document")}
+          {value ??
+            (extractionStatus === "ambiguous" && !corrected ? "Needs an analyst to choose" : "Not stated in the document")}
         </span>
-        {asWritten !== null && <span className="text-xs text-zinc-500">As written: {asWritten}</span>}
+        {original !== null && <span className="text-xs text-zinc-500">{original}</span>}
       </button>
 
       {selected && (
         <div className="flex flex-col gap-2 border-t border-zinc-200 p-2 dark:border-zinc-800">
-          {issues.map((issue) => (
+          {openIssues.map((issue) => (
             <p key={issue.id} className="flex items-start gap-2 text-xs">
               <Badge {...SEVERITY_STYLES[issue.severity]} />
               <span>{issue.message}</span>
@@ -269,8 +317,14 @@ function FieldCard({
               ))}
             </ol>
           ) : (
-            <EvidenceList evidence={field.evidence} />
+            <>
+              {corrected && field.evidence.length > 0 && (
+                <p className="text-xs text-zinc-500">Cited for the extracted value:</p>
+              )}
+              <EvidenceList evidence={field.evidence} />
+            </>
           )}
+          {editable && <FieldReviewControls documentId={documentId} field={field} />}
         </div>
       )}
     </li>

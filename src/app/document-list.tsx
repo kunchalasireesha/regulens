@@ -4,7 +4,7 @@ import { formatBytes, formatTimestamp } from "@/lib/format";
 import { getCurrentActor } from "@/server/auth/current-actor";
 import { getDb } from "@/server/db/client";
 import { listRecentDocuments } from "@/server/db/queries/documents";
-import { DocumentStatus, isInFlight } from "./document-status";
+import { DocumentStatus, ReviewStatus, isInFlight } from "./document-status";
 import { RefreshWhileProcessing } from "./refresh-while-processing";
 
 export async function DocumentList() {
@@ -42,7 +42,7 @@ export async function DocumentList() {
               <td className="py-2 pr-4 tabular-nums">{doc.pageCount ?? "–"}</td>
               <td className="py-2 pr-4 tabular-nums">{formatBytes(doc.sizeBytes)}</td>
               <td className="py-2 pr-4">
-                <DocumentStatus doc={doc} />
+                <DocumentStatus doc={doc} /> <ReviewStatus status={doc.reviewStatus} />
               </td>
               <td className="py-2 whitespace-nowrap text-zinc-500">
                 <time dateTime={doc.createdAt.toISOString()}>{formatTimestamp(doc.createdAt)}</time>

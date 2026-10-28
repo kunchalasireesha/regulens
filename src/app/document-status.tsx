@@ -1,4 +1,4 @@
-import type { ProcessingStatus } from "@/lib/domain/statuses";
+import type { DocumentReviewStatus, ProcessingStatus } from "@/lib/domain/statuses";
 import type { DocumentSummary } from "@/server/db/queries/documents";
 import { failureMessage, isRetryableFailure } from "@/server/pipeline/failures";
 import { retryDocumentAction } from "./actions";
@@ -44,4 +44,17 @@ export function DocumentStatus({ doc }: { doc: StatusFields }) {
       )}
     </>
   );
+}
+
+const REVIEW_LABELS: Partial<Record<DocumentReviewStatus, { label: string; className: string }>> = {
+  in_review: { label: "In review", className: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300" },
+  approved: { label: "Approved", className: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300" },
+  rejected: { label: "Rejected", className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
+};
+
+/** Review status badge, once review has started; nothing for an unreviewed document. */
+export function ReviewStatus({ status }: { status: DocumentReviewStatus }) {
+  const review = REVIEW_LABELS[status];
+  if (!review) return null;
+  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${review.className}`}>{review.label}</span>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareFieldPaths, fieldGroup, fieldShortLabel } from "@/lib/schemas/field-paths";
+import { compareFieldPaths, fieldGroup, fieldKind, fieldShortLabel } from "@/lib/schemas/field-paths";
 
 describe("compareFieldPaths", () => {
   it("restores listFields order from any permutation", () => {
@@ -35,5 +35,17 @@ describe("fieldGroup and fieldShortLabel", () => {
     expect(fieldGroup("people[1].title")).toEqual({ id: "people[1]", label: "Control person 2" });
     expect(fieldShortLabel("people[1].ownershipPercentage")).toBe("Ownership percentage");
     expect(fieldShortLabel("business.dbaNames")).toBe("DBA / trade names");
+  });
+});
+
+describe("fieldKind", () => {
+  it("classifies every field by how its value is edited", () => {
+    expect(fieldKind("business.legalName")).toBe("text");
+    expect(fieldKind("business.dbaNames")).toBe("text_list");
+    expect(fieldKind("business.formationDate")).toBe("date");
+    expect(fieldKind("licensing.expirationDate")).toBe("date");
+    expect(fieldKind("business.registeredAddress")).toBe("address");
+    expect(fieldKind("people[3].ownershipPercentage")).toBe("number");
+    expect(fieldKind("people[0].relationship")).toBe("text");
   });
 });

@@ -1,5 +1,6 @@
 import "server-only";
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { compareFieldPaths } from "@/lib/schemas/field-paths";
 import type { Database } from "../client";
@@ -9,6 +10,8 @@ import {
   extractedFields,
   extractionRuns,
   fieldEvidence,
+  reviewEvents,
+  users,
   validationIssues,
 } from "../schema";
 import { documentSummaryColumns } from "./documents";
@@ -20,10 +23,13 @@ export type ReviewDocument = NonNullable<Awaited<ReturnType<typeof getDocumentRe
 export type ReviewField = ReviewDocument["fields"][number];
 export type ReviewEvidence = ReviewField["evidence"][number];
 export type ReviewIssue = ReviewDocument["issues"][number];
+export type ReviewEvent = ReviewDocument["events"][number];
+
+const reviewer = alias(users, "reviewer");
 
 /**
- * The document, its page text, fields (in schema order, each with its evidence), and
- * validation issues (most severe first). Undefined when the id is malformed or the
+ * The document, its page text, fields (in schema order, each with its evidence),
+ * validation issues (most severe first), and the review history (oldest first). Undefined when the id is malformed or the
  * document belongs to another organization, so the two cases are indistinguishable.
  */
 export async function getDocumentReview(db: Database, organizationId: string, documentId: string) {
@@ -31,13 +37,14 @@ export async function getDocumentReview(db: Database, organizationId: string, do
   if (!z.uuid().safeParse(documentId).success) return undefined;
 
   const [document] = await db
-    .select(documentSummaryColumns)
+    .select({ ...documentSummaryColumns, reviewedAt: documents.reviewedAt, reviewedBy: reviewer.name })
     .from(documents)
+    .leftJoin(reviewer, eq(reviewer.id, documents.reviewedBy))
     .where(and(eq(documents.organizationId, organizationId), eq(documents.id, documentId)))
     .limit(1);
   if (!document) return undefined;
 
-  const [pages, fieldRows, issues] = await Promise.all([
+  const [pages, fieldRows, issues, events] = await Promise.all([
     db
       .select({ pageNumber: documentPages.pageNumber, text: documentPages.text })
       .from(documentPages)
@@ -66,11 +73,29 @@ export async function getDocumentReview(db: Database, organizationId: string, do
         fieldPaths: validationIssues.fieldPaths,
         message: validationIssues.message,
         resolution: validationIssues.resolution,
+        resolutionNote: validationIssues.resolutionNote,
+        resolvedAt: validationIssues.resolvedAt,
       })
       .from(validationIssues)
       .where(and(eq(validationIssues.organizationId, organizationId), eq(validationIssues.documentId, documentId)))
       // Postgres orders enums by declaration: critical, warning, info.
       .orderBy(asc(validationIssues.severity), asc(validationIssues.createdAt), asc(validationIssues.id)),
+    db
+      .select({
+        id: reviewEvents.id,
+        eventType: reviewEvents.eventType,
+        actorName: users.name,
+        fieldPath: reviewEvents.fieldPath,
+        issueId: reviewEvents.issueId,
+        previousValue: reviewEvents.previousValue,
+        newValue: reviewEvents.newValue,
+        note: reviewEvents.note,
+        createdAt: reviewEvents.createdAt,
+      })
+      .from(reviewEvents)
+      .innerJoin(users, eq(users.id, reviewEvents.actorId))
+      .where(and(eq(reviewEvents.organizationId, organizationId), eq(reviewEvents.documentId, documentId)))
+      .orderBy(asc(reviewEvents.createdAt), asc(reviewEvents.id)),
   ]);
 
   const fieldIds = fieldRows.map((field) => field.id);
@@ -101,8 +126,11 @@ export async function getDocumentReview(db: Database, organizationId: string, do
   const [run] = runId
     ? await db
         .select({
+          id: extractionRuns.id,
           provider: extractionRuns.provider,
           model: extractionRuns.model,
+          promptVersion: extractionRuns.promptVersion,
+          schemaVersion: extractionRuns.schemaVersion,
           latencyMs: extractionRuns.latencyMs,
           inputTokens: extractionRuns.inputTokens,
           outputTokens: extractionRuns.outputTokens,
@@ -119,5 +147,5 @@ export async function getDocumentReview(db: Database, organizationId: string, do
     .map((field) => ({ ...field, evidence: evidenceByField.get(field.id) ?? [] }))
     .sort((a, b) => compareFieldPaths(a.fieldPath, b.fieldPath));
 
-  return { document, pages, fields, issues, extractionRun: run ?? null };
+  return { document, pages, fields, issues, events, extractionRun: run ?? null };
 }
