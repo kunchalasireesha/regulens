@@ -28,6 +28,7 @@ pnpm db:migrate   # apply migrations
 pnpm db:seed      # demo organization and analyst (stands in for auth until it exists)
 pnpm check        # lint + typecheck + unit tests
 pnpm test:integration   # upload flow against a separate regulens_test database
+pnpm test:e2e     # browser tests against a production build (see below)
 pnpm dev          # http://localhost:3000
 ```
 
@@ -94,3 +95,20 @@ It reports:
 - **Issue agreement.** Validation is run on the true values and on the extraction; issues
   raised only on the truth are problems the analyst would not be shown.
 - Latency, tokens, and the paid-tier cost estimate.
+
+## End-to-end tests
+
+`pnpm test:e2e` builds the app, starts it on port 3100 against its own `regulens_e2e_test`
+database with mock extraction, and drives it in headless Chromium with Playwright. No API
+key or network is needed; Postgres must be running (`pnpm db:up`).
+
+```bash
+pnpm exec playwright install chromium   # once
+pnpm test:e2e
+pnpm test:e2e --ui                      # watch the tests run, step by step
+```
+
+The specs cover signing in and out, uploading (including a duplicate and a scanned PDF),
+reviewing every field through to approval and the JSON download, and correcting a value,
+seeing the issues it fixes close, and rejecting. The database is reset at the start of the
+run and its document tables before each test, so the specs run one at a time.

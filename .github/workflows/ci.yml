@@ -36,3 +36,40 @@ jobs:
       - run: pnpm test
       # Creates and migrates a separate regulens_test database on the service container.
       - run: pnpm test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: regulens
+          POSTGRES_PASSWORD: regulens
+          POSTGRES_DB: regulens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U regulens -d regulens"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Builds the app, starts it against a regulens_e2e_test database with mock extraction,
+      # and drives it in headless Chromium.
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

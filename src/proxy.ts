@@ -15,7 +15,9 @@ export function proxy(request: NextRequest) {
 
   const { pathname, search } = request.nextUrl;
   const login = new URL("/login", request.url);
-  if (pathname !== "/") login.searchParams.set("next", pathname + search);
+  // Keep the query too ("/?queue=all"); only a bare "/" is the default destination anyway.
+  const next = pathname + search;
+  if (next !== "/") login.searchParams.set("next", next);
   return NextResponse.redirect(login);
 }
 

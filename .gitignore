@@ -46,3 +46,8 @@ next-env.d.ts
 
 # personal notes (not part of the public repo)
 /notes/
+
+# playwright
+/test-results/
+/playwright-report/
+/tests/e2e/.auth/

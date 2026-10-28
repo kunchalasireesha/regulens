@@ -221,6 +221,19 @@ person's title read from another person's line, passes every check; the eval cou
 these as unflagged errors. Scoring is a pure function, so approved documents' analyst
 corrections can later serve as a second labeled set.
 
+**End-to-end tests.** Playwright drives a production build (`next build` + `next start`),
+not the dev server, so the tests see what a deployment would: the proxy, server actions,
+`after()` scheduling, and streaming. The server gets its own `_test` database and mock
+extraction, so a run is deterministic and needs no key. A setup project signs in once
+through the real form and saves the session cookie; every spec reuses it, except the
+login specs, which start signed out. Each spec empties the document tables first, since
+uploads are deduplicated by content hash and a sample can only be uploaded once per
+database; that shared state is why the specs run serially. Assertions go through roles,
+labels, and visible text, the way an analyst finds things, plus the `data-field` attribute
+the review page already uses for scrolling. The suite covers the paths unit and
+integration tests cannot: that the UI reflects each command's outcome (issues closing
+after a correction, approval unlocking, read-only after a decision) and that the export
+download matches the approved record.
 
 ## Data handling
 
