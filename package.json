@@ -19,7 +19,8 @@
     "db:studio": "drizzle-kit studio",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "samples": "tsx scripts/generate-samples.ts",
-    "extract": "tsx --conditions=react-server scripts/extract.ts"
+    "extract": "tsx --conditions=react-server scripts/extract.ts",
+    "eval": "tsx --conditions=react-server scripts/eval.ts"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",

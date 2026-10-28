@@ -2,8 +2,8 @@
 // people, addresses, and numbers are invented.
 //
 // Each fixture is also the ground truth for what extraction should return, so the
-// evaluation script (Phase 8) can score the model against the same data the PDF
-// was rendered from.
+// evaluation script (`pnpm eval`, see ground-truth.ts) scores the model against the
+// same data the PDF was rendered from.
 
 export type SampleAddress = {
   street: string;
@@ -142,4 +142,129 @@ export const cobaltPeak: SampleApplication = {
   ],
 };
 
-export const SAMPLE_APPLICATIONS = [harborline, cobaltPeak] as const;
+export const lumenLedger: SampleApplication = {
+  slug: "lumen-ledger",
+  purpose:
+    "Clean application with harder values: several DBA names, a spelled-out state, " +
+    "abbreviated month names, ZIP+4, an accented name, and four control persons.",
+  business: {
+    legalName: "Lumen Ledger Corp.",
+    dbaNames: ["Lumen Pay", "LedgerSend", "Lumen Remit Services"],
+    formationJurisdiction: "New York",
+    formationDate: "Sept. 5, 2018",
+    registeredAddress: {
+      street: "80 State Street",
+      unit: null,
+      city: "Albany",
+      state: "NY",
+      postalCode: "12207",
+    },
+    principalAddress: {
+      street: "1 Liberty Plaza",
+      unit: "Floor 23",
+      city: "New York",
+      state: "NY",
+      postalCode: "10006-1404",
+    },
+  },
+  licensing: {
+    licenseType: "Money Transmitter License",
+    licenseNumber: "NY-MT-118204",
+    applicationDate: "Oct. 1, 2026",
+    expirationDate: "Sept. 30, 2028",
+  },
+  people: [
+    {
+      name: "Esther Lindqvist",
+      title: "President",
+      ownershipPercentage: 40,
+      relationship: "Officer, Director, Beneficial Owner",
+    },
+    {
+      name: "Rafael Domínguez-Ortiz",
+      title: "Chief Operating Officer",
+      ownershipPercentage: 35,
+      relationship: "Officer, Beneficial Owner",
+    },
+    {
+      name: "June Nakamura",
+      title: "Chief Compliance Officer",
+      ownershipPercentage: null,
+      relationship: "Officer",
+    },
+    {
+      name: "Oluwaseun Adeyemi",
+      title: "Independent Director",
+      ownershipPercentage: 12.5,
+      relationship: "Director, Beneficial Owner",
+    },
+  ],
+};
+
+export const prairieWire: SampleApplication = {
+  slug: "prairie-wire",
+  purpose:
+    "Problems different from Cobalt Peak's, mostly warnings: registered office outside the " +
+    "state of formation, an impossible date, a short ZIP code, an owner with no stated " +
+    "percentage, ownership totalling 105%, and five control persons.",
+  business: {
+    legalName: "Prairie Wire Transfer Co.",
+    dbaNames: ["Prairie Wire"],
+    formationJurisdiction: "Kansas",
+    formationDate: "02/30/2020",
+    registeredAddress: {
+      street: "120 Walnut Street",
+      unit: null,
+      city: "Kansas City",
+      state: "MO",
+      postalCode: "64106",
+    },
+    principalAddress: {
+      street: "9300 Metcalf Avenue",
+      unit: "Suite 410",
+      city: "Overland Park",
+      state: "KS",
+      postalCode: "6621",
+    },
+  },
+  licensing: {
+    licenseType: "Money Transmitter License",
+    licenseNumber: "KS-MTL-0091",
+    applicationDate: "June 22, 2026",
+    expirationDate: null,
+  },
+  people: [
+    {
+      name: "Harold Brandt",
+      title: "Chief Executive Officer",
+      ownershipPercentage: 55,
+      relationship: "Officer, Beneficial Owner",
+    },
+    {
+      name: "Corinne Vasquez",
+      title: "President",
+      ownershipPercentage: 50,
+      relationship: "Officer, Director, Beneficial Owner",
+    },
+    {
+      name: "Samuel Whitfield",
+      title: "Treasurer",
+      ownershipPercentage: null,
+      relationship: "Officer, Beneficial Owner",
+    },
+    {
+      name: "Grace Liu",
+      title: "Chief Compliance Officer",
+      ownershipPercentage: null,
+      relationship: "Officer",
+    },
+    {
+      name: "Daniel Okoro",
+      title: "Director",
+      ownershipPercentage: null,
+      relationship: "Director",
+    },
+  ],
+};
+
+export const SAMPLE_APPLICATIONS = [harborline, cobaltPeak, lumenLedger, prairieWire] as const;

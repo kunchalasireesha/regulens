@@ -38,6 +38,7 @@ export ─► approved records only; extracted vs. corrected vs. missing kept di
 | `src/server/pipeline` | Stage orchestration, processing events, idempotency. |
 | `src/server/review` | Edits, issue resolution, approval rules. |
 | `src/server/export` | Approved record → export JSON. Pure. |
+| `src/server/eval` | Scores an extraction against ground truth. Pure. |
 | `scripts/samples` | Fictional sample applications: fixtures (ground truth) and PDF renderer. |
 
 Evidence, validation, and export are pure functions with no database or network access,
@@ -207,6 +208,19 @@ failed, since it needs a retry rather than more waiting. The review queue lists 
 first. Each row shows fields reviewed and open critical/warning issues. Extraction stats
 per provider and model (success rate, median latency of successful runs, tokens,
 estimated cost) come from `extraction_runs`.
+
+**Evaluation.** `pnpm eval` scores extraction on the samples against the fixtures they
+were rendered from, so the labels are exact by construction. People are matched by
+position, as the prompt asks for document order. Values are compared the way the app
+reads them (normalized dates and state codes, whitespace folded, case and punctuation
+kept), since a difference the app normalizes away cannot reach the analyst. Beyond
+accuracy it measures what matters for review: whether each wrong value was flagged by
+some issue, and whether validation on the extraction raises the same issues (by rule and
+fields) as validation on the true values. A wrong value with a real quote, such as one
+person's title read from another person's line, passes every check; the eval counts
+these as unflagged errors. Scoring is a pure function, so approved documents' analyst
+corrections can later serve as a second labeled set.
+
 
 ## Data handling
 

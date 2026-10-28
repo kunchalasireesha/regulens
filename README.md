@@ -39,6 +39,8 @@ pnpm dev          # http://localhost:3000
 |---|---|
 | `harborline-payments.pdf` | Complete and consistent; should validate cleanly |
 | `cobalt-peak-remit.pdf` | Deliberate problems: ownership over 100%, invalid state, dates out of order |
+| `lumen-ledger.pdf` | Clean, with harder values: three DBA names, spelled-out state, abbreviated months, ZIP+4, accented name |
+| `prairie-wire.pdf` | Mostly warnings: registered office out of state, impossible date, short ZIP, owner without a percentage |
 | `scanned-no-text-layer.pdf` | No text layer, like a scan; stored but marked failed (no OCR) |
 
 The fixtures in `scripts/samples/fixtures.ts` are also the ground truth for evaluation.
@@ -68,3 +70,27 @@ layout it reports every field as not found.
 Free-tier limits vary by model and are shown in
 [AI Studio](https://aistudio.google.com/rate-limit). Free-tier inputs may be used by Google
 to improve its products, so use only synthetic documents.
+
+## Evaluation
+
+`pnpm eval` extracts every sample and scores it against the fixtures it was rendered from
+(`scripts/samples/ground-truth.ts`). Nothing is stored; it makes one model call per sample.
+
+```bash
+pnpm eval                          # Gemini if a key is set
+pnpm eval --mock                   # offline; the mock should score 100%
+pnpm eval --json eval-report.json  # also write the full report
+```
+
+It reports:
+
+- **Field accuracy.** Values are compared after the app's own normalization (ISO dates,
+  state codes) and whitespace folding; case and punctuation still count. Each field is
+  `correct`, `correct_absent`, `wrong_value`, `missed`, `invented`, or `ambiguous`.
+- **Evidence located.** Of the values the model returned, how many cite text that exists.
+- **Errors flagged.** Of the fields the model got wrong, how many a validation issue
+  names. An unflagged error (a real quote, but for the wrong value) is the kind only
+  an attentive analyst catches.
+- **Issue agreement.** Validation is run on the true values and on the extraction; issues
+  raised only on the truth are problems the analyst would not be shown.
+- Latency, tokens, and the paid-tier cost estimate.
