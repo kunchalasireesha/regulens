@@ -28,7 +28,8 @@ export ─► approved records only; extracted vs. corrected vs. missing kept di
 | `src/lib/domain` | Shared status vocabularies. |
 | `src/lib/schemas` | Zod contracts shared across server and UI; field paths and labels. |
 | `src/server/env.ts` | Server-only config. Selects the AI provider. |
-| `src/server/auth` | Current actor. A seeded demo analyst until authentication exists. |
+| `src/server/auth` | Password hashing, database sessions, current actor (the data access layer's entry point). |
+| `src/proxy.ts` | Redirects requests without a session cookie to `/login`. Convenience only. |
 | `src/server/db` | Drizzle schema, client, org-scoped queries. |
 | `src/server/ingestion` | File checks, hashing, PDF text extraction, file storage, upload service. |
 | `src/server/extraction` | `ExtractionProvider` interface, Gemini and mock implementations, prompt. |
@@ -181,10 +182,28 @@ The rule is one pure function shared by the server and the review screen.
 otherwise). Each value is labeled `extracted` (with its verified quotes), `corrected` (with
 the model's value), or `missing`, and every issue is listed with its resolution.
 
+**Authentication.** Email and password, hashed with Node's built-in scrypt at the OWASP
+parameters (N=2^17, r=8, p=1), which are stored in each hash so they can be raised later.
+Signing in creates a row in `sessions` keyed by the SHA-256 of a random 256-bit token; the
+browser holds the token in an `httpOnly`, `SameSite=Lax` cookie (`Secure` in production).
+A database session, unlike a signed stateless cookie, ends the moment the row is deleted,
+and a copy of the table cannot be used to sign in. Sessions last 12 hours with no sliding
+renewal. An unknown email is checked against a decoy hash, so it takes as long to reject
+as a wrong password, and both get the same message. There is no sign-up page: accounts
+are issued (`pnpm user:create`), as in a real compliance team.
+
+**Where authorization happens.** `proxy.ts` only checks that a cookie exists, to redirect
+early with a `next` path; it never touches the database. The real check is
+`getCurrentActor`, which every page, server action, and route handler calls: it looks the
+session up (expiry compared on the database clock) and returns the user's organization,
+which scopes every query. A forged or expired cookie passes the proxy and is stopped there.
+The export route answers 401 instead of redirecting, since a download has no page. After
+login, `next` is accepted only as a same-site path, so the form is not an open redirect.
+
 ## Data handling
 
 - Synthetic documents only. Gemini free-tier inputs may be used by Google to improve its
   products, so real applicant data must not be sent to the free tier.
 - No document text or identifiers in logs or processing events.
 - API keys are read only in server-only modules.
-- Authentication and per-user authorization are added before any public deployment.
+- Passwords are stored only as scrypt hashes, session tokens only as SHA-256 hashes.

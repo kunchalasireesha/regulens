@@ -67,9 +67,30 @@ export const users = pgTable(
     email: text("email").notNull().unique(),
     name: text("name").notNull(),
     role: userRole("role").notNull().default("analyst"),
+    /** scrypt hash in the format produced by hashPassword. Null means the user cannot sign in. */
+    passwordHash: text("password_hash"),
     createdAt: createdAt(),
   },
   (t) => [index("users_organization_idx").on(t.organizationId)],
+);
+
+/**
+ * Signed-in sessions. The browser holds a random token; only its SHA-256 is stored, so a
+ * copy of this table cannot be used to sign in. Signing out deletes the row, which ends
+ * the session immediately (a signed, stateless cookie could not be revoked).
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    /** SHA-256 of the session token, hex encoded. */
+    tokenHash: char("token_hash", { length: 64 }).primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("sessions_user_idx").on(t.userId)],
 );
 
 export const documents = pgTable(

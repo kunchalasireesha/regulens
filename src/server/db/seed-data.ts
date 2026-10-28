@@ -1,5 +1,5 @@
-// The demo organization and analyst that stand in for a signed-in user until
-// authentication is added (Phase 8). Fixed IDs make seeding idempotent.
+// The demo organization and its analyst, created by `pnpm db:seed` (which also sets the
+// analyst's password). Fixed IDs make seeding idempotent.
 // No "server-only" import: the seed script runs outside Next.js.
 
 export const DEMO_ORGANIZATION = {

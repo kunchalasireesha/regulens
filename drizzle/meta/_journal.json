@@ -29,6 +29,13 @@
       "when": 1793034060765,
       "tag": "0003_document_processing_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793209541278,
+      "tag": "0004_auth_sessions",
+      "breakpoints": true
     }
   ]
 }

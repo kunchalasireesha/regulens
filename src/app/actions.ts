@@ -34,6 +34,9 @@ export async function uploadDocumentAction(
     return { status: "error", message: "Choose a PDF file to upload." };
   }
 
+  const db = getDb();
+  // Outside the try: it redirects to the login page when the session has ended.
+  const actor = await getCurrentActor(db);
   const env = getEnv();
   // Reject before reading the body into a buffer.
   if (file.size > env.maxUploadBytes) {
@@ -41,8 +44,6 @@ export async function uploadDocumentAction(
   }
 
   try {
-    const db = getDb();
-    const actor = await getCurrentActor(db);
     const result = await uploadDocument(
       {
         db,

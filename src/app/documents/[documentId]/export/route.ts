@@ -1,4 +1,4 @@
-import { getCurrentActor } from "@/server/auth/current-actor";
+import { findCurrentUser } from "@/server/auth/current-actor";
 import { getDb } from "@/server/db/client";
 import { getDocumentReview } from "@/server/db/queries/review";
 import { buildExport } from "@/server/export/build-export";
@@ -10,8 +10,10 @@ import { buildExport } from "@/server/export/build-export";
 export async function GET(_request: Request, ctx: RouteContext<"/documents/[documentId]/export">) {
   const { documentId } = await ctx.params;
   const db = getDb();
-  const actor = await getCurrentActor(db);
-  const review = await getDocumentReview(db, actor.organizationId, documentId);
+  // A download has no page to redirect, so a missing session is a plain 401.
+  const user = await findCurrentUser(db);
+  if (!user) return Response.json({ error: "unauthenticated" }, { status: 401 });
+  const review = await getDocumentReview(db, user.organizationId, documentId);
   // Another organization's document and a malformed id look the same as a missing one.
   if (!review) return Response.json({ error: "not_found" }, { status: 404 });
   if (review.document.reviewStatus !== "approved") {

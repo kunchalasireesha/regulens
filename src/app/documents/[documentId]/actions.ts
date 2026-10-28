@@ -96,9 +96,11 @@ async function run(
   command: (db: Database, actor: Actor) => Promise<ReviewResult>,
   fieldPath?: string,
 ): Promise<ReviewActionState> {
+  const db = getDb();
+  // Outside the try: it redirects to the login page when the session has ended.
+  const actor = await getCurrentActor(db);
   try {
-    const db = getDb();
-    const result = await command(db, await getCurrentActor(db));
+    const result = await command(db, actor);
     if (!result.ok) {
       const message =
         result.code === "invalid_value" && fieldPath
