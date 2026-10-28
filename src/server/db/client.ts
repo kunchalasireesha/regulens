@@ -6,8 +6,9 @@ import * as schema from "./schema";
 
 export type Database = ReturnType<typeof createDatabase>;
 
-function createDatabase() {
-  const sql = postgres(getEnv().databaseUrl, { max: 10 });
+/** Exported for integration tests, which connect to a separate test database. */
+export function createDatabase(url: string, options: { max?: number } = {}) {
+  const sql = postgres(url, { max: options.max ?? 10 });
   return drizzle(sql, { schema });
 }
 
@@ -15,6 +16,6 @@ function createDatabase() {
 const globalForDb = globalThis as unknown as { regulensDb?: Database };
 
 export function getDb(): Database {
-  globalForDb.regulensDb ??= createDatabase();
+  globalForDb.regulensDb ??= createDatabase(getEnv().databaseUrl);
   return globalForDb.regulensDb;
 }

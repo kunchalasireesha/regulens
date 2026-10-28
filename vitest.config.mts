@@ -10,7 +10,22 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
     environment: "node",
+    projects: [
+      {
+        extends: true,
+        test: { name: "unit", include: ["tests/unit/**/*.test.ts"] },
+      },
+      {
+        // Real Postgres (a separate regulens_test database), so files run one at a time.
+        extends: true,
+        test: {
+          name: "integration",
+          include: ["tests/integration/**/*.test.ts"],
+          globalSetup: ["tests/integration/global-setup.ts"],
+          fileParallelism: false,
+        },
+      },
+    ],
   },
 });

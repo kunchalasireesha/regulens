@@ -26,16 +26,18 @@ export ─► approved records only; extracted vs. corrected vs. missing kept di
 |---|---|
 | `src/app` | Routes, server actions, route handlers. Input validation only. |
 | `src/lib/domain` | Shared status vocabularies. |
-| `src/lib/schemas` | Zod contracts shared across server and UI. |
+| `src/lib/schemas` | Zod contracts shared across server and UI; field paths and labels. |
 | `src/server/env.ts` | Server-only config. Selects the AI provider. |
+| `src/server/auth` | Current actor. A seeded demo analyst until authentication exists. |
 | `src/server/db` | Drizzle schema, client, org-scoped queries. |
-| `src/server/ingestion` | File checks, hashing, PDF text extraction. |
+| `src/server/ingestion` | File checks, hashing, PDF text extraction, file storage, upload service. |
 | `src/server/extraction` | `ExtractionProvider` interface, Gemini and mock implementations, prompt. |
 | `src/server/evidence` | Quote normalization and verification. Pure. |
 | `src/server/validation` | Business rules. Pure. |
 | `src/server/pipeline` | Stage orchestration, processing events, idempotency. |
 | `src/server/review` | Edits, issue resolution, approval rules. |
 | `src/server/export` | Approved record → export JSON. Pure. |
+| `scripts/samples` | Fictional sample applications: fixtures (ground truth) and PDF renderer. |
 
 Evidence, validation, and export are pure functions with no database or network access,
 so they are unit-tested directly and reused unchanged by the evaluation script.
@@ -53,6 +55,25 @@ candidates). A missing value is never an empty string or a guess.
 both sides and searches the cited page, then all pages: `verified`, `page_corrected`
 (stored with the real page), or `not_found`, which flags the field for review.
 
+**What evidence matching tolerates.** Quote and page text are normalized the same way
+before searching: Unicode compatibility forms (ligatures, non-breaking spaces), accents,
+curly quotes and dashes, case, and whitespace runs (so a quote that joins wrapped lines
+still matches). A changed word or reordered phrase does not match. The normalizer keeps a
+map to the original text, so matches are stored as offsets into the page the analyst sees.
+A verified quote proves the text exists, not that it supports the value, so the value
+itself (each address part, each DBA name; numbers compared numerically) must also appear
+in its quotes, or the field gets an `evidence.value_mismatch` warning.
+
+**Validation rules and severities.** Rules are pure functions over the result plus the
+evidence roll-up; they never change a value. `critical` means the record is wrong or
+incomplete as extracted (required field missing, expiration not after application date,
+ownership outside 0–100% or totalling over 100%, invalid state); `warning` means an
+analyst should look (unverified or missing evidence, ambiguous value, unparseable date,
+registered office outside the state of formation); `info` is expected but worth noting
+(no license number yet). A field's validation status is the most severe issue naming it.
+Dates are compared after normalization to ISO, so "07/19/2019" and "2026-08-02" compare
+correctly; numeric dates are read month-first, as on US forms.
+
 **Separate statuses.** Documents track processing and review status separately. Fields
 track extraction, evidence, validation, and review status separately.
 
@@ -65,6 +86,20 @@ when no key is configured and in all automated tests. The provider-facing JSON s
 kept within Gemini's supported JSON Schema subset (no `const`), and every response is
 re-validated with Zod, since the API does not enforce keywords such as `minLength`.
 
+**Flat provider schema, strict domain schema.** The model fills a flat shape in which every
+field always has `status`, `value`, `evidence`, and `candidates`, derived from Zod with
+`z.toJSONSchema` (a unit test fails if it uses a keyword outside Gemini's documented subset
+or emits numeric bounds). The response is converted to the domain union and parsed with the
+strict domain schema; contradictions such as a `not_found` field with a value fail as
+`schema_mismatch` instead of being repaired. Failures log field paths, never values.
+
+**Every extraction attempt is recorded.** `extraction_runs` stores provider, model, prompt
+and schema versions, tokens (thinking tokens count as output), latency, a paid-tier cost
+estimate, an error code on failure, and the validated result on success, so fields can be
+re-derived after a verification or validation change without calling the model again.
+Retries are limited to transient HTTP failures (3 attempts, capped backoff), since a
+free-tier 429 can mean the daily quota is spent.
+
 **Tenancy.** Single organization in the MVP; every tenant-owned table has
 `organization_id`, and every query is scoped by it, so row-level security can be added later
 without a data migration.
@@ -72,9 +107,54 @@ without a data migration.
 **Append-only audit log.** A database trigger rejects UPDATE and DELETE on `review_events`.
 This also prevents deleting reviewed documents until a retention policy exists.
 
-**Processing without a worker.** The pipeline is a plain function triggered after upload,
-with an atomic claim to prevent double processing. It can move to a job queue without
-changes to the stages.
+**Rejected vs. failed uploads.** A file that is not a readable PDF, is encrypted, or
+exceeds the size or page limit is rejected and nothing is stored. A valid PDF with no text
+layer (a scan) is a legitimate submission: it is stored and marked `failed` with
+`no_text_layer`, so it stays visible. Checks use the file's bytes, never its name or MIME type.
+
+**Duplicate detection and storage.** Files are stored under
+`{organization_id}/{sha256}.pdf`. A unique `(organization_id, content_hash)` constraint
+plus `ON CONFLICT DO NOTHING` makes concurrent uploads of the same file create exactly one
+document. The file is written before the database rows; because keys are content-derived,
+an orphaned write after a failed insert is harmless and a retry reuses it.
+
+**Processing without a worker.** The pipeline is a plain function that the upload action
+schedules with Next.js `after()`, so the response returns while the model runs; the
+document list polls until nothing is in flight. It can move to a job queue without changes
+to the stages.
+
+**Processing state machine.** `queued → processing → ready_for_review | failed`, plus
+`failed → queued` (retry) for retryable codes. A scanned PDF (`no_text_layer`) is not
+retryable: the stored text cannot change. Every transition is one conditional `UPDATE`,
+so the database decides races: of five concurrent runs, exactly one claims the document.
+
+**Stale attempts and fencing.** A claim increments `processing_attempts`. An attempt still
+`processing` after 15 minutes (well above the slowest Gemini run: 3 × 120 s plus backoff)
+is presumed dead and can be reclaimed or retried. The claimer finishes only while the
+attempt number is still its own, so a stalled run that wakes up after being replaced
+cannot overwrite the newer attempt (it returns `superseded` and its work is discarded).
+Staleness is computed in SQL against the database clock, never the web server's.
+
+**One transaction per outcome.** The model call runs outside any transaction, since it can
+take minutes. Everything after it (the status change, fields, evidence, issues, and stage
+events) commits together, so a document is never `ready_for_review` with partial fields.
+The status `UPDATE` runs first: it locks the row, and if the claim is no longer current
+nothing has been written yet.
+
+**Stored field values.** `extracted_value` is the value as the model returned it (for an
+ambiguous field, the list of candidate values; null when not found). `current_value`
+starts as the normalized value, or the extracted value when there is no normalized form,
+and is null for ambiguous and missing fields until an analyst supplies one. Unexpected
+pipeline errors are logged by error class and Postgres code only, because database errors
+can carry query parameters, which here are document values.
+
+**Review screen.** `/documents/[id]` shows fields beside the document's extracted text,
+with every located quote highlighted at its stored offsets, so the analyst sees exactly
+the words the value came from. Overlapping quotes are split into runs that carry every
+field citing them. Unverified quotes have no location and are listed on the field instead.
+Fields are ordered by an explicit comparator, not by the stored result, because `jsonb`
+does not preserve object key order. A malformed id and another organization's document
+both render the same not-found page.
 
 ## Data handling
 
