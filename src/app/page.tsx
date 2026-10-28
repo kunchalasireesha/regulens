@@ -1,10 +1,12 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { parseQueueFilter } from "@/lib/dashboard/queues";
 import { getEnv } from "@/server/env";
 import { DocumentList } from "./document-list";
+import { ExtractionStats } from "./extraction-stats";
 import { UploadForm } from "./upload-form";
 
-export default function Home() {
+export default function Home({ searchParams }: PageProps<"/">) {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-12">
       <header className="flex flex-col gap-1">
@@ -20,8 +22,18 @@ export default function Home() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Documents</h2>
+        {/* The queue comes from the URL, which is only known per request, so the list streams in. */}
         <Suspense fallback={<p className="text-sm text-zinc-500">Loading documents…</p>}>
-          <DocumentList />
+          {searchParams.then(({ queue }) => (
+            <DocumentList filter={parseQueueFilter(queue)} />
+          ))}
+        </Suspense>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Extraction</h2>
+        <Suspense fallback={<p className="text-sm text-zinc-500">Loading extraction stats…</p>}>
+          <ExtractionStats />
         </Suspense>
       </section>
     </main>

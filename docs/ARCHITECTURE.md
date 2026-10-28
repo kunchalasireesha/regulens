@@ -200,6 +200,14 @@ which scopes every query. A forged or expired cookie passes the proxy and is sto
 The export route answers 401 instead of redirecting, since a download has no page. After
 login, `next` is accepted only as a same-site path, so the form is not an open redirect.
 
+**Dashboard.** The home page sorts every document into one work queue (needs review, in
+progress, failed, approved, rejected), chosen by a single SQL `CASE` that both the tab
+counts and the list filter use, so they cannot disagree. A stalled attempt counts as
+failed, since it needs a retry rather than more waiting. The review queue lists oldest
+first. Each row shows fields reviewed and open critical/warning issues. Extraction stats
+per provider and model (success rate, median latency of successful runs, tokens,
+estimated cost) come from `extraction_runs`.
+
 ## Data handling
 
 - Synthetic documents only. Gemini free-tier inputs may be used by Google to improve its
