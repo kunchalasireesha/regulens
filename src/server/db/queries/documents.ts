@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { staleProcessing } from "@/server/pipeline/transitions";
 import type { Database } from "../client";
 import { documentPages, documents } from "../schema";
@@ -33,6 +33,14 @@ export async function findDocumentByHash(
     .where(and(eq(documents.organizationId, organizationId), eq(documents.contentHash, contentHash)))
     .limit(1);
   return row;
+}
+
+export async function countDocuments(db: Database, organizationId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(documents)
+    .where(eq(documents.organizationId, organizationId));
+  return row?.count ?? 0;
 }
 
 export async function listRecentDocuments(

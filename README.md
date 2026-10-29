@@ -1,23 +1,87 @@
 # ReguLens
 
-AI-powered regulatory document intelligence: turn business licensing applications into
-structured, traceable, validated records, with human review.
+AI-assisted intake for business licensing applications: a PDF goes in, and a structured,
+validated record comes out, with every value traced to the words it came from and
+approved by a person.
 
 > Independent portfolio project. All sample documents and data are fictional.
 
-**Status:** Phase 5: uploading a PDF runs the full pipeline (extract → verify evidence →
-validate) in the background and stores reviewable fields, evidence, and validation issues;
-the document list updates when processing finishes, and failed runs can be retried. The
-review screen comes next.
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
+**Live demo:** LIVE_DEMO_URL. The sign-in page shows a shared demo account. The demo
+uses mock extraction (no AI key on the server, nothing sent to a model), so upload the
+[sample applications](samples/), not other PDFs.
 
-## Requirements
+![Review screen: an ownership percentage of 150% flagged by two critical issues, with the cited line highlighted in the document text](docs/screenshots/review.png)
+
+## What it does
+
+A compliance analyst uploads a licensing application (a fictional, NMLS-style Money
+Transmitter License application: company details plus each control person). Then:
+
+1. **An LLM drafts the extraction.** Google Gemini fills a fixed schema: each field is
+   `found` (with a value and the quote it came from), `not_found`, or `ambiguous` (with
+   candidates). Nothing is guessed into an empty string.
+2. **Code checks the model's work.** Every quote is searched for in the PDF's text; a
+   quote that isn't there flags the field. Business rules (dates in order, ownership
+   within 0–100% and adding up, valid state codes, required fields) raise issues graded
+   critical, warning, or info.
+3. **The analyst decides.** The review screen shows each field beside the document text
+   with its evidence highlighted. The analyst accepts or corrects each value and resolves
+   each issue; corrections are re-validated. Approval needs every field reviewed and no
+   open blocking issue, and every action goes to an append-only audit log.
+4. **Approved records export as JSON**, with each value labeled as extracted (with its
+   evidence), corrected (with the model's original), or missing.
+
+| Dashboard | Approved document |
+|---|---|
+| ![Dashboard with work queues, open issue counts per document, and extraction stats](docs/screenshots/dashboard.png) | ![An approved application with its JSON download](docs/screenshots/approved.png) |
+
+## Why it's built this way
+
+An LLM is good at reading messy documents and bad at being accountable. ReguLens treats
+the model's answer as a draft that has to prove itself:
+
+- **Evidence is verified, never trusted.** The model must cite page and quote; the code
+  normalizes both sides and finds the quote, or the field is flagged. A verified quote must
+  also contain the value, so a real quote attached to the wrong value is caught too.
+- **Schema checks shape; rules check meaning.** An ownership of 150% passes the schema
+  (that is what the document says) and fails validation, so the analyst sees it instead
+  of it being silently dropped.
+- **Raw, normalized, and current values are kept apart.** The model's value is never
+  overwritten, so analyst corrections double as labeled evaluation data.
+- **The database decides races.** Processing is a state machine of conditional `UPDATE`s
+  with an attempt counter as a fencing token; review commands lock the document row.
+- **Measured, not assumed.** `pnpm eval` scores extraction against the ground truth the
+  samples were generated from, including how many wrong values the checks caught.
+
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the design and the reasoning behind each
+decision.
+
+## Stack
+
+TypeScript (strict) end to end · Next.js 16 (App Router, Server Actions, `after()`) ·
+React 19 · PostgreSQL with Drizzle ORM · Zod · Tailwind CSS · Google Gemini API
+(`@google/genai`) behind a provider interface, with a mock for tests and the demo ·
+unpdf (pdf.js) for text extraction · Vitest (unit and integration against a real
+Postgres) · Playwright (end to end against a production build) · deployed on Vercel with
+Supabase Postgres and Storage.
+
+```
+Browser ──► Next.js on Vercel ── server actions, pages, export route
+              ├─ pipeline (after the upload responds):
+              │    parse PDF ─► extract (Gemini / mock) ─► verify evidence ─► validate
+              ├─► Postgres (Supabase): documents, fields, evidence, issues, audit log
+              └─► Supabase Storage: original PDFs, private, content-addressed
+```
+
+## Running it locally
+
+### Requirements
 
 - Node.js 24 (`nvm use` reads `.nvmrc`)
 - pnpm 10 (`corepack enable && corepack prepare pnpm@10 --activate`)
 - Docker (for local Postgres)
 
-## Setup
+### Setup
 
 ```bash
 nvm use
@@ -25,7 +89,7 @@ pnpm install
 cp .env.example .env.local
 pnpm db:up        # start Postgres in Docker
 pnpm db:migrate   # apply migrations
-pnpm db:seed      # demo organization and analyst (stands in for auth until it exists)
+pnpm db:seed      # demo organization and analyst@example.com (password: regulens-demo)
 pnpm check        # lint + typecheck + unit tests
 pnpm test:integration   # upload flow against a separate regulens_test database
 pnpm test:e2e     # browser tests against a production build (see below)
@@ -112,3 +176,46 @@ The specs cover signing in and out, uploading (including a duplicate and a scann
 reviewing every field through to approval and the JSON download, and correcting a value,
 seeing the issues it fixes close, and rejecting. The database is reset at the start of the
 run and its document tables before each test, so the specs run one at a time.
+
+## Screenshots
+
+The images in `docs/screenshots` are produced by a Playwright script against the same
+production build and mock extraction as the end-to-end tests, so they can be regenerated
+after a UI change:
+
+```bash
+pnpm screenshots
+```
+
+## Deployment
+
+The live demo runs on Vercel (Hobby) with Supabase Postgres and Storage, all on free
+tiers. Locally, files go to disk; with `STORAGE_BACKEND=supabase` they go to a private
+Supabase Storage bucket through its REST API. Vercel connects through Supabase's
+transaction pooler, so prepared statements are off. Every table has row-level security
+enabled with no policies, so Supabase's auto-generated Data API exposes nothing even if
+it is switched on; the app connects as the table owner and is unaffected.
+
+The public demo sets `PUBLIC_DEMO=true` (the sign-in page shows the shared account),
+`AI_PROVIDER=mock`, and `MAX_DOCUMENTS` to cap what visitors can upload.
+
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) is the step-by-step runbook, including security
+checks, resetting demo data, and troubleshooting.
+
+## Limitations
+
+- **One document type.** The schema, prompt, and rules are for one fictional application
+  form. Another type means another schema and rule set on the same pipeline.
+- **No OCR.** A scanned PDF is stored and marked failed with a reason.
+- **Text view, not a PDF viewer.** Evidence is highlighted in the extracted page text, not
+  drawn on the rendered page.
+- **Live extraction quality is not yet measured.** The Gemini provider is unit-tested
+  against stubbed API responses, and the eval harness is ready, but no scores against the
+  live model are published here yet. The public demo uses the mock provider.
+- **Processing runs in the web process** (`after()`), not on a job queue. A run that dies
+  is detected as stale after 15 minutes and can be retried, but nothing retries it
+  automatically.
+- **Single organization.** Every table and query is scoped by `organization_id`, but there
+  is no way to create a second organization, and no roles beyond analyst.
+- **Free-tier data use.** Google may use Gemini free-tier inputs to improve its products,
+  so only synthetic documents belong there.

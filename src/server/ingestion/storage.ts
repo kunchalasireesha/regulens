@@ -3,8 +3,8 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 
 /**
- * Where uploaded files live. Local disk in development; an object store (e.g.
- * Supabase Storage) can implement the same interface for deployment.
+ * Where uploaded files live: local disk in development, Supabase Storage when deployed
+ * (supabase-storage.ts), chosen by createFileStorage.
  */
 export interface FileStorage {
   /** Stores bytes under key. Writing an existing key is a no-op. */

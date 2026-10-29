@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { Database } from "@/server/db/client";
 import {
+  countDocuments,
   documentSummaryColumns,
   findDocumentByHash,
   type DocumentSummary,
@@ -15,7 +16,8 @@ import { storageKeyFor, type FileStorage } from "./storage";
 export type UploadDeps = {
   db: Database;
   storage: FileStorage;
-  limits: { maxUploadBytes: number; maxPages: number };
+  /** maxDocuments: how many documents an organization may hold; unset or null is unlimited. */
+  limits: { maxUploadBytes: number; maxPages: number; maxDocuments?: number | null };
 };
 
 export type UploadInput = {
@@ -49,6 +51,13 @@ export async function uploadDocument(deps: UploadDeps, input: UploadInput): Prom
   const contentHash = createHash("sha256").update(bytes).digest("hex");
   const existing = await findDocumentByHash(db, organizationId, contentHash);
   if (existing) return { kind: "duplicate", document: existing };
+
+  // After the duplicate check, which stores nothing, so a full workspace can still
+  // open existing documents. Concurrent uploads can overshoot by a few; the cap only
+  // bounds a public demo's storage, so it needs no lock.
+  if (limits.maxDocuments != null && (await countDocuments(db, organizationId)) >= limits.maxDocuments) {
+    return { kind: "rejected", code: "document_limit_reached" };
+  }
 
   const parseStartedAt = performance.now();
   const parsed = await readPdfText(bytes, limits);

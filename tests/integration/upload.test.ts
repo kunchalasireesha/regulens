@@ -180,4 +180,26 @@ describe("uploadDocument", () => {
     expect(tooLong).toEqual({ kind: "rejected", code: "too_many_pages" });
     expect(await db.select().from(documents)).toHaveLength(0);
   });
+
+  it("caps documents per organization but still opens duplicates when full", async () => {
+    const capped = { ...deps, limits: { ...deps.limits, maxDocuments: 1 } };
+    await uploadDocument(capped, demoUpload(harborlinePdf));
+
+    const cobaltPdf = await buildApplicationPdf(cobaltPeak);
+    expect(await uploadDocument(capped, demoUpload(cobaltPdf))).toEqual({
+      kind: "rejected",
+      code: "document_limit_reached",
+    });
+    expect((await uploadDocument(capped, demoUpload(harborlinePdf))).kind).toBe("duplicate");
+    expect(await storedFiles(DEMO_ORGANIZATION.id)).toHaveLength(1);
+
+    // The cap counts each organization's documents separately.
+    const other = await uploadDocument(capped, {
+      organizationId: OTHER_ORGANIZATION.id,
+      uploadedBy: OTHER_USER.id,
+      filename: "application.pdf",
+      bytes: cobaltPdf,
+    });
+    expect(other.kind).toBe("created");
+  });
 });

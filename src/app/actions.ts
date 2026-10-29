@@ -8,7 +8,7 @@ import { getDb } from "@/server/db/client";
 import { getEnv } from "@/server/env";
 import { createExtractionProvider } from "@/server/extraction/create-provider";
 import { UPLOAD_REJECTION_MESSAGES } from "@/server/ingestion/errors";
-import { LocalFileStorage } from "@/server/ingestion/storage";
+import { createFileStorage } from "@/server/ingestion/create-storage";
 import { uploadDocument } from "@/server/ingestion/upload";
 import { runPipeline } from "@/server/pipeline/run-pipeline";
 import { requeueDocument, type DocumentRef } from "@/server/pipeline/transitions";
@@ -47,8 +47,12 @@ export async function uploadDocumentAction(
     const result = await uploadDocument(
       {
         db,
-        storage: new LocalFileStorage(env.storageDir),
-        limits: { maxUploadBytes: env.maxUploadBytes, maxPages: env.maxPages },
+        storage: createFileStorage(env.storage),
+        limits: {
+          maxUploadBytes: env.maxUploadBytes,
+          maxPages: env.maxPages,
+          maxDocuments: env.maxDocuments,
+        },
       },
       {
         organizationId: actor.organizationId,

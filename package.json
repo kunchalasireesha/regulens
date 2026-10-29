@@ -21,7 +21,8 @@
     "samples": "tsx scripts/generate-samples.ts",
     "extract": "tsx --conditions=react-server scripts/extract.ts",
     "eval": "tsx --conditions=react-server scripts/eval.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "screenshots": "SCREENSHOTS=1 playwright test --project=screenshots"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",

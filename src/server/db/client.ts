@@ -6,9 +6,16 @@ import * as schema from "./schema";
 
 export type Database = ReturnType<typeof createDatabase>;
 
-/** Exported for integration tests, which connect to a separate test database. */
+/**
+ * Exported for integration tests, which connect to a separate test database.
+ *
+ * Prepared statements are off everywhere, not only in production: a transaction-mode
+ * pooler (Supabase's, for serverless) hands each transaction a different server
+ * connection, where a statement prepared on another one does not exist. Running the
+ * same setting locally means the tests exercise what the deployment does.
+ */
 export function createDatabase(url: string, options: { max?: number } = {}) {
-  const sql = postgres(url, { max: options.max ?? 10 });
+  const sql = postgres(url, { max: options.max ?? 10, prepare: false });
   return drizzle(sql, { schema });
 }
 
@@ -16,6 +23,7 @@ export function createDatabase(url: string, options: { max?: number } = {}) {
 const globalForDb = globalThis as unknown as { regulensDb?: Database };
 
 export function getDb(): Database {
-  globalForDb.regulensDb ??= createDatabase(getEnv().databaseUrl);
+  const env = getEnv();
+  globalForDb.regulensDb ??= createDatabase(env.databaseUrl, { max: env.databasePoolMax });
   return globalForDb.regulensDb;
 }

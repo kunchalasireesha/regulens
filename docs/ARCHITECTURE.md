@@ -27,11 +27,11 @@ export ─► approved records only; extracted vs. corrected vs. missing kept di
 | `src/app` | Routes, server actions, route handlers. Input validation only. |
 | `src/lib/domain` | Shared status vocabularies. |
 | `src/lib/schemas` | Zod contracts shared across server and UI; field paths and labels. |
-| `src/server/env.ts` | Server-only config. Selects the AI provider. |
+| `src/server/env.ts` | Server-only config. Selects the AI provider and file storage. |
 | `src/server/auth` | Password hashing, database sessions, current actor (the data access layer's entry point). |
 | `src/proxy.ts` | Redirects requests without a session cookie to `/login`. Convenience only. |
 | `src/server/db` | Drizzle schema, client, org-scoped queries. |
-| `src/server/ingestion` | File checks, hashing, PDF text extraction, file storage, upload service. |
+| `src/server/ingestion` | File checks, hashing, PDF text extraction, file storage (local disk or Supabase Storage), upload service. |
 | `src/server/extraction` | `ExtractionProvider` interface, Gemini and mock implementations, prompt. |
 | `src/server/evidence` | Quote normalization and verification. Pure. |
 | `src/server/validation` | Business rules. Pure. |
@@ -103,8 +103,9 @@ Retries are limited to transient HTTP failures (3 attempts, capped backoff), sin
 free-tier 429 can mean the daily quota is spent.
 
 **Tenancy.** Single organization in the MVP; every tenant-owned table has
-`organization_id`, and every query is scoped by it, so row-level security can be added later
-without a data migration.
+`organization_id`, and every query is scoped by it. The app enforces this itself, through
+`getCurrentActor`; row-level security (below) currently only locks out other database
+roles, but per-organization policies could be added without a data migration.
 
 **Append-only audit log.** A database trigger rejects UPDATE and DELETE on `review_events`.
 This also prevents deleting reviewed documents until a retention policy exists.
@@ -235,10 +236,44 @@ integration tests cannot: that the UI reflects each command's outcome (issues cl
 after a correction, approval unlocking, read-only after a decision) and that the export
 download matches the approved record.
 
+## Deployment
+
+The public demo runs on Vercel with Supabase Postgres and Storage; the runbook is
+[DEPLOYMENT.md](DEPLOYMENT.md). The same code runs locally with Docker Postgres and local
+disk, selected by environment variables.
+
+**Storage behind an interface.** `FileStorage` has two implementations: local disk, and
+Supabase Storage called over its REST API with `fetch` (no SDK, so the dependency is a few
+dozen lines that the unit tests can stub). The bucket is private and the secret key lives
+only in server-side environment variables. Keys stay content-addressed, so a duplicate
+write (HTTP 409) counts as success, just as on disk. The app never reads a file back after
+upload: the review screen works from the page text stored in Postgres.
+
+**Connection pooling.** Serverless functions start and stop constantly, so Vercel connects
+through Supabase's transaction pooler, which lends a server connection per transaction.
+Statements prepared on one connection don't exist on the next, so prepared statements are
+off everywhere, locally too, so the tests run with the deployed setting. Migrations run
+from a laptop through the session pooler, which behaves like a direct connection.
+
+**Row-level security as a second lock.** Supabase exposes every table in the `public`
+schema through its auto-generated Data API, reachable with the publishable key that is
+meant to be public. Every table has RLS enabled with no policies, which denies all rows to
+any role that isn't the owner. The app connects as the owner, so it is unaffected; an
+integration test checks every table and probes with a non-owner role.
+
+**Public demo limits.** `PUBLIC_DEMO=true` shows the shared account's credentials on the
+sign-in page (read per request, not baked into the prerendered shell). The demo runs the
+mock provider, so no key sits on the server and no visitor upload reaches a model.
+`MAX_DOCUMENTS` caps documents per organization; the check comes after the duplicate check,
+so a full demo still opens existing documents, and without a lock, since overshooting by a
+concurrent upload or two is harmless. Vercel rejects request bodies over 4.5 MB before the
+app sees them, so the demo sets `MAX_UPLOAD_BYTES` to 4 MB, which also sizes the Server
+Action body limit at build time.
+
 ## Data handling
 
 - Synthetic documents only. Gemini free-tier inputs may be used by Google to improve its
   products, so real applicant data must not be sent to the free tier.
 - No document text or identifiers in logs or processing events.
-- API keys are read only in server-only modules.
+- API keys and the Supabase secret key are read only in server-only modules.
 - Passwords are stored only as scrypt hashes, session tokens only as SHA-256 hashes.

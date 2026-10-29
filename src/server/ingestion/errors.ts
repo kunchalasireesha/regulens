@@ -8,6 +8,7 @@ export const UPLOAD_REJECTION_MESSAGES = {
   invalid_pdf: "The PDF is damaged or could not be read.",
   encrypted_pdf: "The PDF is password-protected. Upload an unprotected copy.",
   too_many_pages: "The PDF has more pages than the limit.",
+  document_limit_reached: "This workspace has reached its document limit.",
 } as const;
 
 export type UploadRejectionCode = keyof typeof UPLOAD_REJECTION_MESSAGES;

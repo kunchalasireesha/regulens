@@ -51,11 +51,16 @@ export const extractionRunStatus = pgEnum("extraction_run_status", ["succeeded",
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
+// Every table enables row-level security with no policies. The app connects as the
+// table owner, which RLS does not restrict; Supabase's Data API connects as the `anon`
+// and `authenticated` roles, which it denies every row. Tenant isolation stays in the
+// application's queries (organization_id), so this only closes the side door.
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   createdAt: createdAt(),
-});
+}).enableRLS();
 
 export const users = pgTable(
   "users",
@@ -72,7 +77,7 @@ export const users = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("users_organization_idx").on(t.organizationId)],
-);
+).enableRLS();
 
 /**
  * Signed-in sessions. The browser holds a random token; only its SHA-256 is stored, so a
@@ -91,7 +96,7 @@ export const sessions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("sessions_user_idx").on(t.userId)],
-);
+).enableRLS();
 
 export const documents = pgTable(
   "documents",
@@ -128,7 +133,7 @@ export const documents = pgTable(
     unique("documents_org_content_hash_unique").on(t.organizationId, t.contentHash),
     index("documents_org_created_idx").on(t.organizationId, t.createdAt),
   ],
-);
+).enableRLS();
 
 const documentRef = () =>
   uuid("document_id")
@@ -150,7 +155,7 @@ export const documentPages = pgTable(
     text: text("text").notNull(),
   },
   (t) => [primaryKey({ columns: [t.documentId, t.pageNumber] })],
-);
+).enableRLS();
 
 export const extractionRuns = pgTable(
   "extraction_runs",
@@ -178,7 +183,7 @@ export const extractionRuns = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("extraction_runs_document_idx").on(t.documentId)],
-);
+).enableRLS();
 
 export const extractedFields = pgTable(
   "extracted_fields",
@@ -204,7 +209,7 @@ export const extractedFields = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique("extracted_fields_document_path_unique").on(t.documentId, t.fieldPath)],
-);
+).enableRLS();
 
 export const fieldEvidence = pgTable(
   "field_evidence",
@@ -225,7 +230,7 @@ export const fieldEvidence = pgTable(
     matchEnd: integer("match_end"),
   },
   (t) => [index("field_evidence_field_idx").on(t.fieldId)],
-);
+).enableRLS();
 
 export const validationIssues = pgTable(
   "validation_issues",
@@ -244,7 +249,7 @@ export const validationIssues = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("validation_issues_document_idx").on(t.documentId)],
-);
+).enableRLS();
 
 /** Append-only audit log of analyst actions. Rows are never updated or deleted. */
 export const reviewEvents = pgTable(
@@ -265,7 +270,7 @@ export const reviewEvents = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("review_events_document_idx").on(t.documentId, t.createdAt)],
-);
+).enableRLS();
 
 /** Pipeline telemetry. Stores stage outcomes and error codes, never document content. */
 export const processingEvents = pgTable(
@@ -281,4 +286,4 @@ export const processingEvents = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("processing_events_document_idx").on(t.documentId, t.createdAt)],
-);
+).enableRLS();

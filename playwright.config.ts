@@ -8,6 +8,8 @@ import { AUTH_STATE_FILE, E2E_BASE_URL, E2E_DATABASE_URL, E2E_PORT, E2E_STORAGE_
 // The specs share one database and one server, and every spec starts by emptying the
 // document tables, so they run one at a time.
 
+const SCREENSHOTS = process.env.SCREENSHOTS === "1";
+
 export default defineConfig({
   testDir: "tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
@@ -29,6 +31,17 @@ export default defineConfig({
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE_FILE },
     },
+    // README screenshots (`pnpm screenshots`), left out of the test run.
+    ...(SCREENSHOTS
+      ? [
+          {
+            name: "screenshots",
+            testMatch: /\.screenshots\.ts/,
+            dependencies: ["setup"],
+            use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE_FILE },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: `pnpm build && pnpm start --port ${E2E_PORT}`,
